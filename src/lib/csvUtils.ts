@@ -1,63 +1,92 @@
 export const parseCSV = (csvText: string): any[] => {
-  const lines: string[] = [];
-  let currentLine = '';
-  let insideQuotes = false;
+  if (!csvText) return [];
 
-  for (let i = 0; i < csvText.length; i++) {
+  // Single-pass RFC-4180-style tokenizer. The previous implementation stripped
+  // quote characters while splitting lines, so a quoted comma was treated as a
+  // delimiter and every embedded quote was lost.
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < csvText.length) {
     const char = csvText[i];
-    if (char === '"') {
-      if (insideQuotes && csvText[i + 1] === '"') {
-        currentLine += '"';
-        i++;
-      } else {
-        insideQuotes = !insideQuotes;
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (csvText[i + 1] === '"') {
+          field += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i += 1;
+        continue;
       }
-    } else if (char === '\n' && !insideQuotes) {
-      lines.push(currentLine);
-      currentLine = '';
-    } else {
-      currentLine += char;
+      field += char;
+      i += 1;
+      continue;
     }
+
+    if (char === '"') {
+      inQuotes = true;
+      i += 1;
+      continue;
+    }
+    if (char === ',') {
+      row.push(field);
+      field = '';
+      i += 1;
+      continue;
+    }
+    if (char === '\r') {
+      i += 1;
+      continue;
+    }
+    if (char === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      i += 1;
+      continue;
+    }
+    field += char;
+    i += 1;
   }
-  if (currentLine) lines.push(currentLine);
 
-  if (lines.length < 2) return [];
+  // Flush the final field/row, dropping the empty row produced by a trailing
+  // newline.
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
 
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map((h) => h.trim());
   const data = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const rowValues: string[] = [];
-    let currentVal = '';
-    let inQuotes = false;
-    const line = lines[i];
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        rowValues.push(currentVal);
-        currentVal = '';
-      } else {
-        currentVal += char;
-      }
-    }
-    rowValues.push(currentVal);
-
+  for (let r = 1; r < rows.length; r += 1) {
+    const rowValues = rows[r];
+    if (rowValues.length === 1 && rowValues[0] === '') continue;
     const row: any = {};
     headers.forEach((header, index) => {
-      let val = rowValues[index]?.trim() || '';
-      // Remove surrounding quotes if they exist
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.substring(1, val.length - 1).replace(/""/g, '"');
-      }
-      
-      // Try to parse JSON for objects/arrays
-      if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
+      if (!header) return;
+      const raw = rowValues[index] === undefined ? '' : rowValues[index];
+      let val: any = raw.trim();
+
+      // Try to parse JSON for objects/arrays.
+      if (
+        (val.startsWith('{') && val.endsWith('}')) ||
+        (val.startsWith('[') && val.endsWith(']'))
+      ) {
         try {
           val = JSON.parse(val);
-        } catch (e) {}
+        } catch (e) {
+          // keep the plain string when it is not valid JSON
+        }
       }
       row[header] = val;
     });

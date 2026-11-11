@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "tsc -p tsconfig.test.json && node --test \"dist-test/test/*.test.js\"",
+    "test:coverage": "tsc -p tsconfig.test.json && node --test --experimental-test-coverage \"dist-test/test/*.test.js\""
   },
   "dependencies": {
     "next": "15.1.0",

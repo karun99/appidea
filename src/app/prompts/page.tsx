@@ -96,13 +96,17 @@ export default function PromptsPage() {
     if (!file) return;
 
     try {
-      const importedPrompts = await importData(file);
-      const updatedPrompts = [...importedPrompts, ...prompts];
+      const importedPrompts = await importData<Prompt>(file);
+      const updatedPrompts: Prompt[] = [...importedPrompts, ...prompts];
       
       // Filter out duplicates based on content or ID if necessary
-      const uniquePrompts = Array.from(new Map(updatedPrompts.map(p => [p.id || p.content, p])).values());
+      const uniquePrompts = Array.from(
+        new Map<string, Prompt>(
+          updatedPrompts.map((p) => [p.id || p.content, p] as [string, Prompt]),
+        ).values(),
+      );
       
-      setPrompts(uniquePrompts as Prompt[]);
+      setPrompts(uniquePrompts);
       saveToStorage('prompts', uniquePrompts);
       alert(`Successfully imported ${importedPrompts.length} prompts!`);
     } catch (error: any) {
